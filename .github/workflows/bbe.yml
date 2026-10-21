@@ -1,0 +1,77 @@
+name: BBE Reconciliation (US + Canada)
+
+on:
+  schedule:
+    - cron: "0 12 * * *" # 12:00 UTC = 5:30 PM IST
+  workflow_dispatch: {}
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          playwright install --with-deps chromium
+
+      # bbe-us and bbe-ca share one Amazon login and run in a single
+      # switched session (see export_amazon_by_type.py's
+      # scrape_amazon_brands()) - only bbe-us's own session file needs to
+      # be cached/seeded, since switching to bbe-ca happens in-app from it.
+      - name: Restore session cache
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            storage_state_bbe-us.json
+            storage_state_hector.json
+            hector_mcp_token.json
+          key: bbe-session-${{ github.run_id }}
+          restore-keys: |
+            bbe-session-
+
+      - name: Seed sessions from secrets on first-ever run
+        run: |
+          [ -f storage_state_bbe-us.json ] || echo "${{ secrets.STORAGE_STATE_BBE_US_B64 }}" | base64 -d > storage_state_bbe-us.json
+          [ -f storage_state_hector.json ] || echo "${{ secrets.STORAGE_STATE_HECTOR_B64 }}" | base64 -d > storage_state_hector.json
+          [ -f hector_mcp_token.json ] || echo "${{ secrets.HECTOR_MCP_TOKEN_B64 }}" | base64 -d > hector_mcp_token.json
+
+      - name: Write .env
+        run: |
+          cat > .env << EOF
+          AMAZON_ADS_EMAIL=${{ secrets.AMAZON_ADS_EMAIL }}
+          AMAZON_ADS_PASSWORD=${{ secrets.AMAZON_ADS_PASSWORD }}
+          AMAZON_ADS_TOTP_SECRET=${{ secrets.AMAZON_ADS_TOTP_SECRET }}
+          AMAZON_ADS_BASE_URL=${{ secrets.AMAZON_ADS_BASE_URL }}
+          HEADLESS=true
+          HECTOR_EMAIL=${{ secrets.HECTOR_EMAIL }}
+          HECTOR_PASSWORD=${{ secrets.HECTOR_PASSWORD }}
+          HECTOR_BASE_URL=${{ secrets.HECTOR_BASE_URL }}
+          EOF
+
+      - name: Write Google service account key
+        run: echo "${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON_B64 }}" | base64 -d > data-reconciliation-510312-70a744333ac6.json
+
+      - name: Compute trailing 30-day window
+        id: dates
+        run: |
+          echo "start=$(date -u -d '30 days ago' +%d-%m-%Y)" >> "$GITHUB_OUTPUT"
+          echo "end=$(date -u -d 'yesterday' +%d-%m-%Y)" >> "$GITHUB_OUTPUT"
+
+      - name: Run pipeline
+        run: python run_pipeline.py --start ${{ steps.dates.outputs.start }} --end ${{ steps.dates.outputs.end }} --brands bbe-us,bbe-ca
+
+      - name: Save session cache
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            storage_state_bbe-us.json
+            storage_state_hector.json
+            hector_mcp_token.json
+          key: bbe-session-${{ github.run_id }}

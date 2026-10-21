@@ -4,3 +4,5 @@ python-dotenv>=1.0
 pandas>=2.2
 gspread>=6.2
 google-auth>=2.59
+mcp>=2.3
+httpx2>=2.13
