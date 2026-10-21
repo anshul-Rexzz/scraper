@@ -1,0 +1,14 @@
+.env
+storage_state.json
+storage_state_*.json
+*service-account*.json
+data-reconciliation-*.json
+hector_mcp_token.json
+__pycache__/
+*.pyc
+.venv/
+venv/
+output/
+output.zip
+logs/
+.claude/

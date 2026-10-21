@@ -1,0 +1,6 @@
+playwright>=1.47
+pyotp>=2.9
+python-dotenv>=1.0
+pandas>=2.2
+gspread>=6.2
+google-auth>=2.59
