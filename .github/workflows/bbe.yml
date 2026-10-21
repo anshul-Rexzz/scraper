@@ -69,8 +69,11 @@ jobs:
       - name: Run pipeline
         run: python run_pipeline.py --start ${{ steps.dates.outputs.start }} --end ${{ steps.dates.outputs.end }} --brands bbe-us,bbe-ca
 
+      # See campus.yml's note on this - only cache on success, so a failed
+      # login's unchanged (still-expired) session can never poison later
+      # runs' restore-keys fallback and shadow a freshly-updated secret.
       - name: Save session cache
-        if: always()
+        if: success()
         uses: actions/cache/save@v4
         with:
           path: |

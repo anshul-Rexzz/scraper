@@ -71,8 +71,13 @@ jobs:
       - name: Run pipeline
         run: python run_pipeline.py --start ${{ steps.dates.outputs.start }} --end ${{ steps.dates.outputs.end }} --brand campus
 
+      # Confirmed live: if: always() let a FAILED login's unchanged (still-
+      # expired) session get cached, which then poisoned every later run's
+      # restore-keys fallback - permanently shadowing a freshly-updated
+      # seed secret until that cache entry expired naturally. Only cache
+      # on success, so a bad session can never get "locked in".
       - name: Save session cache
-        if: always()
+        if: success()
         uses: actions/cache/save@v4
         with:
           path: |
