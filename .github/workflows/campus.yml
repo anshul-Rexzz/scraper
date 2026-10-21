@@ -37,10 +37,13 @@ jobs:
           restore-keys: |
             campus-session-
 
+      # storage_state_hector.json is deliberately NOT seeded from a secret -
+      # Hector's login has no 2FA (plain email+password), so a fresh,
+      # fully-automated login works fine even with zero cached session;
+      # caching it above is purely a speed optimization, not a requirement.
       - name: Seed sessions from secrets on first-ever run
         run: |
           [ -f storage_state_campus.json ] || echo "${{ secrets.STORAGE_STATE_CAMPUS_B64 }}" | base64 -d > storage_state_campus.json
-          [ -f storage_state_hector.json ] || echo "${{ secrets.STORAGE_STATE_HECTOR_B64 }}" | base64 -d > storage_state_hector.json
           [ -f hector_mcp_token.json ] || echo "${{ secrets.HECTOR_MCP_TOKEN_B64 }}" | base64 -d > hector_mcp_token.json
 
       - name: Write .env
