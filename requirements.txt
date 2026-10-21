@@ -6,3 +6,4 @@ gspread>=6.2
 google-auth>=2.59
 mcp>=2.3
 httpx2>=2.13
+httpx>=0.28
