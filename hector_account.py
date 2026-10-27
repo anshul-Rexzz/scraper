@@ -81,11 +81,19 @@ def switch_brand(page, brand_name: str, country: str | None = None) -> None:
     Confirmed live: this admin login covers many unrelated client
     accounts (it defaulted to "3M - Car Care" on fresh login, not any of
     our target brands), and the switcher's search is scoped to whatever
-    country is currently selected there - a fresh session always starts
-    on "IN" (confirmed live across repeated fresh sessions), so a brand
-    in another country (e.g. "Beauty by Earth" under US) won't show up
-    until that's switched first via `country` (the dropdown option's own
-    text, e.g. "US" or "Canada" - not necessarily a 2-letter ISO code)."""
+    country is currently selected there - a brand in another country
+    (e.g. "Beauty by Earth" under US) won't show up until that's switched
+    first via `country` (the dropdown option's own text, e.g. "US" or
+    "Canada" - not necessarily a 2-letter ISO code).
+
+    Confirmed live: the DEFAULT starting country on a fresh session is
+    NOT reliably "IN" - it held on a local/Windows machine across many
+    repeated sessions, but broke the first time this ran from a
+    GitHub Actions runner (hosted in a different region, likely
+    affecting a geolocation-based default). Rather than hardcode any
+    specific starting value, this clicks whatever country IS currently
+    selected via its stable `custom-select-text` class, independent of
+    what that text actually says."""
     # The switcher trigger is whatever brand name is currently showing,
     # which we don't know in advance - "Role:" is the one stable anchor
     # next to it regardless of which brand is active.
@@ -94,7 +102,7 @@ def switch_brand(page, brand_name: str, country: str | None = None) -> None:
 
     if country:
         panel = page.locator("text=AMS").first.locator("xpath=ancestor::div[3]")
-        panel.get_by_text("IN", exact=True).first.click(force=True)  # opens the country list
+        panel.locator(".custom-select-text").first.click(force=True)  # opens the country list
         page.wait_for_timeout(1000)
         panel.get_by_text(country, exact=True).first.click(force=True)
         page.wait_for_timeout(1500)
