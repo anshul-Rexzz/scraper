@@ -19,6 +19,10 @@ from export_hector_by_type import enable_campaign_types_table, find_table_by_hea
 
 OUTPUT_DIR = "output"
 _NUMBER_RE = re.compile(r"[^\d.-]")
+MONTH_ABBR = {
+    1: "Jan", 2: "Feb", 3: "Mar", 4: "Apr", 5: "May", 6: "Jun",
+    7: "Jul", 8: "Aug", 9: "Sep", 10: "Oct", 11: "Nov", 12: "Dec",
+}
 TYPE_TO_KEY = {
     "Sponsored Products": "sp", "Sponsored Brands": "sb", "Sponsored Display": "sd",
     "Grand Total": "total",
@@ -61,18 +65,40 @@ def scrape_hector(date_range: dict) -> dict:
         page.wait_for_timeout(8000)
         switch_brand(page, brand["hector_brand_name"], brand.get("hector_country"))
 
-        if not set_date_range(
-            page, targeting_url,
-            date_range["day_start"], date_range["month_start"], date_range["year_start"],
-            date_range["day_end"], date_range["month_end"], date_range["year_end"],
-        ):
-            raise RuntimeError("Could not set the Hector date range")
+        # Confirmed live: set_date_range() can report success (no exception,
+        # every click landed) while the page's own generally-flaky date
+        # widget silently applied something else entirely - once, a single
+        # day instead of the requested 30-day range, with no error at any
+        # layer. That got written straight to the sheet as if it were
+        # correct. Verifying what the page itself says was applied turns
+        # that silent data-corruption bug into a loud, retriable failure.
+        expected_start = f"{date_range['day_start']:02d} {MONTH_ABBR[date_range['month_start']]}"
+        expected_end = f"{date_range['day_end']:02d} {MONTH_ABBR[date_range['month_end']]}"
+        for attempt in range(1, 4):
+            if not set_date_range(
+                page, targeting_url,
+                date_range["day_start"], date_range["month_start"], date_range["year_start"],
+                date_range["day_end"], date_range["month_end"], date_range["year_end"],
+            ):
+                raise RuntimeError("Could not set the Hector date range")
 
-        page.wait_for_timeout(3000)
-        body_text = page.locator("body").inner_text()
-        idx = body_text.find("Last 30 Days")
-        idx = idx if idx >= 0 else body_text.find(":")
-        print("Applied range on page:", body_text[idx:idx + 60] if idx >= 0 else "<not found>")
+            page.wait_for_timeout(3000)
+            body_text = page.locator("body").inner_text()
+            idx = body_text.find("Last 30 Days")
+            idx = idx if idx >= 0 else body_text.find(":")
+            applied_range_text = body_text[idx:idx + 60] if idx >= 0 else "<not found>"
+            print("Applied range on page:", applied_range_text)
+
+            if expected_start in applied_range_text and expected_end in applied_range_text:
+                break
+            print(f"  Applied range doesn't match requested range, retrying ({attempt}/3)")
+            if attempt == 3:
+                raise RuntimeError(
+                    f"Hector's date picker kept applying a different range than requested - "
+                    f"expected start {expected_start!r} and end {expected_end!r} somewhere in "
+                    f"the page text, got {applied_range_text!r} on every attempt. Refusing to "
+                    "scrape with a mismatched range."
+                )
 
         try:
             table = find_table_by_header(page, "Campaign Types", exclude_header="Match Types")

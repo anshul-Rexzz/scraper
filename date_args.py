@@ -52,6 +52,11 @@ def parse_date_range_multi(description: str) -> list[dict]:
         "--brands", default=",".join(BRANDS),
         help=f"Comma-separated accounts to pull data for (default: all - {', '.join(BRANDS)})",
     )
+    parser.add_argument(
+        "--skip-amazon", action="store_true",
+        help="Skip the Amazon scrape entirely (e.g. while its login needs a human for 2FA) - "
+        "writes Hector-only rows, leaving Amazon Console and Variation %% blank for a later run to fill in.",
+    )
     args = parser.parse_args()
 
     start = datetime.strptime(args.start, "%d-%m-%Y")
@@ -68,6 +73,7 @@ def parse_date_range_multi(description: str) -> list[dict]:
             "label": label,
             "brand": get_brand(brand_key),
             "brand_key": brand_key,
+            "skip_amazon": args.skip_amazon,
         }
         for brand_key in brand_keys
     ]

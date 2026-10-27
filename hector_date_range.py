@@ -26,6 +26,22 @@ MONTH_NAMES = [
 ]
 
 
+def _advance_months_via_button(wrapper, months_to_advance: int) -> None:
+    """Confirmed live: advancing to a SECOND month via the JS-dispatched
+    <select> change event (as _navigate_to_month does) silently drops the
+    in-progress range selection from the already-clicked start day - the
+    resulting "applied range" ends up being just that single start day,
+    with no error anywhere. A REAL click on the "next month" button
+    preserves that selection correctly, confirmed live. The button only
+    goes forward (no "previous" button exists on this page) - fine here
+    since this is only ever used to advance from month_start to a later
+    month_end, never backward."""
+    next_button = wrapper.locator("button.rdrNextButton")
+    for _ in range(months_to_advance):
+        next_button.first.click(timeout=15000, force=True)
+        wrapper.page.wait_for_timeout(800)
+
+
 def _navigate_to_month(wrapper, target_month: int, target_year: int) -> None:
     """The picker only exposes a "next" button (confirmed live: 0 "prev"
     buttons exist anywhere on the page) and its displayed month persists
@@ -100,8 +116,13 @@ def set_date_range(
             print("  [5] day_start clicked")
 
             if (month_end, year_end) != (month_start, year_start):
-                print(f"  [6] navigating to {MONTH_NAMES[month_end - 1]} {year_end}")
-                _navigate_to_month(current, month_end, year_end)
+                months_to_advance = (year_end - year_start) * 12 + (month_end - month_start)
+                print(f"  [6] advancing {months_to_advance} month(s) to {MONTH_NAMES[month_end - 1]} {year_end}")
+                _advance_months_via_button(current, months_to_advance)
+                label = current.locator(".rdrMonthName").inner_text(timeout=15000).strip()
+                target_label = f"{MONTH_NAMES[month_end - 1]} {year_end}"
+                if label != target_label:
+                    raise RuntimeError(f"Advanced to '{label}', expected '{target_label}'")
                 active_days = current.locator("button.rdrDay:not(.rdrDayPassive)")
 
             print(f"  [7] clicking day {day_end}")

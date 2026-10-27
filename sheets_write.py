@@ -84,7 +84,7 @@ def write_campus_block(
     start_row: int,
     from_date: str,
     to_date: str,
-    amazon: dict,
+    amazon: dict | None,
     hector: dict,
     hector_mcp: dict | None = None,
     updated_by: str = "Automated",
@@ -93,6 +93,10 @@ def write_campus_block(
 ) -> int:
     """amazon/hector/hector_mcp dicts: {"sp": (orders, revenue), "sb": (...), "sd": (...), "total": (...)}
     hector_mcp is optional - the row is left blank (as before) if not given.
+    amazon is also optional (e.g. a Hector-only scheduled run while Amazon
+    login needs a human for 2FA) - its row and the Variation % row (which
+    needs Amazon as the denominator) are both left blank, to be filled in
+    by a later manual run once Amazon data is available.
     Returns the row number where the NEXT block should start."""
     now = datetime.now()
     r = start_row
@@ -133,7 +137,10 @@ def write_campus_block(
     hector_row = col_header_row + 2
     mcp_row = col_header_row + 3
     variation_row = col_header_row + 4
-    ws.update(f"B{amazon_row}:J{amazon_row}", [data_row("Amazon Console", amazon)])
+    if amazon is not None:
+        ws.update(f"B{amazon_row}:J{amazon_row}", [data_row("Amazon Console", amazon)])
+    else:
+        ws.update(f"B{amazon_row}", [["Amazon Console"]])  # left blank - fill in later
     ws.update(f"B{hector_row}:J{hector_row}", [data_row("Hector Console", hector)])
     if hector_mcp is not None:
         ws.update(f"B{mcp_row}:J{mcp_row}", [data_row("Hector MCP", hector_mcp)])
@@ -151,19 +158,27 @@ def write_campus_block(
     for col in ("D", "F", "H", "J"):
         ws.format(f"{col}{amazon_row}:{col}{last_data_row}", _revenue_format(currency_symbol))
 
-    # Variation (%) = (Amazon - Hector) * 100 / Amazon, per the user's
-    # formula - one live formula per column, always relative to Amazon.
-    variation_formulas = [
-        f"=({col}{amazon_row}-{col}{hector_row})*100/{col}{amazon_row}" for col in DATA_COLS
-    ]
-    ws.update(
-        f"B{variation_row}:J{variation_row}",
-        [["Variation %"] + variation_formulas],
-        value_input_option="USER_ENTERED",
-    )
+    if amazon is not None:
+        # Variation (%) = (Amazon - Hector) * 100 / Amazon, per the user's
+        # formula - one live formula per column, always relative to Amazon.
+        # Referencing amazon_row here is why this whole row is skipped
+        # when amazon is None - with no Amazon numbers the formula would
+        # just divide by a blank cell and show an error instead of a
+        # number, so leave it for a later run to fill in once Amazon data
+        # exists for this block.
+        variation_formulas = [
+            f"=({col}{amazon_row}-{col}{hector_row})*100/{col}{amazon_row}" for col in DATA_COLS
+        ]
+        ws.update(
+            f"B{variation_row}:J{variation_row}",
+            [["Variation %"] + variation_formulas],
+            value_input_option="USER_ENTERED",
+        )
+        ws.format(f"C{variation_row}:J{variation_row}", {"numberFormat": {"type": "NUMBER", "pattern": "0.00\"%\""}})
+        add_variation_warning_format(ws, variation_row)
+    else:
+        ws.update(f"B{variation_row}", [["Variation %"]])
     ws.format(f"B{variation_row}", BOLD)
-    ws.format(f"C{variation_row}:J{variation_row}", {"numberFormat": {"type": "NUMBER", "pattern": "0.00\"%\""}})
-    add_variation_warning_format(ws, variation_row)
 
     # Anchor the 2 blank spacer rows (see find_next_empty_row docstring) -
     # an invisible single space in column A, well clear of any visible

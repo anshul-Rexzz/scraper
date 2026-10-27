@@ -1,0 +1,78 @@
+name: Hector-Only Reconciliation (no Amazon)
+
+# Runs Hector Console + Hector MCP only, skipping the Amazon scrape
+# entirely - a fallback while Amazon's login needs a human for 2FA.
+# Needs no Amazon-related secrets at all (no AMAZON_ADS_*, no
+# STORAGE_STATE_*_B64), since it never touches Amazon. Leaves the
+# "Amazon Console" and "Variation %" cells blank in the sheet for a later
+# manual run to fill in once Amazon data is available (see
+# write_campus_block()'s amazon=None handling).
+
+on:
+  schedule:
+    - cron: "0 5 * * *" # 05:00 UTC = 10:30 AM IST
+  workflow_dispatch:
+    inputs:
+      brands:
+        description: "Comma-separated brands (default: bbe-us,bbe-ca - Campus currently blocked by a separate Hector Vendor Central reauth issue)"
+        required: false
+        default: "bbe-us,bbe-ca"
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          playwright install --with-deps chromium
+
+      - name: Restore Hector session cache
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            storage_state_hector.json
+            hector_mcp_token.json
+          key: hector-only-session-${{ github.run_id }}
+          restore-keys: |
+            hector-only-session-
+
+      - name: Seed Hector MCP token from secret on first-ever run
+        run: |
+          [ -f hector_mcp_token.json ] || echo "${{ secrets.HECTOR_MCP_TOKEN_B64 }}" | base64 -d > hector_mcp_token.json
+
+      - name: Write .env
+        run: |
+          cat > .env << EOF
+          HEADLESS=true
+          HECTOR_EMAIL=${{ secrets.HECTOR_EMAIL }}
+          HECTOR_PASSWORD=${{ secrets.HECTOR_PASSWORD }}
+          HECTOR_BASE_URL=${{ secrets.HECTOR_BASE_URL }}
+          EOF
+
+      - name: Write Google service account key
+        run: echo "${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON_B64 }}" | base64 -d > data-reconciliation-510312-70a744333ac6.json
+
+      - name: Compute trailing 30-day window
+        id: dates
+        run: |
+          echo "start=$(date -u -d '30 days ago' +%d-%m-%Y)" >> "$GITHUB_OUTPUT"
+          echo "end=$(date -u -d 'yesterday' +%d-%m-%Y)" >> "$GITHUB_OUTPUT"
+
+      - name: Run pipeline (Hector only)
+        run: python run_pipeline.py --start ${{ steps.dates.outputs.start }} --end ${{ steps.dates.outputs.end }} --brands ${{ github.event.inputs.brands || 'bbe-us,bbe-ca' }} --skip-amazon
+
+      - name: Save session cache
+        if: success()
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            storage_state_hector.json
+            hector_mcp_token.json
+          key: hector-only-session-${{ github.run_id }}

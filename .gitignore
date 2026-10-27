@@ -12,3 +12,5 @@ output/
 output.zip
 logs/
 .claude/
+hector_date_fail_*.png
+GITHUB_SECRETS.md

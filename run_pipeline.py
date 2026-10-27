@@ -27,9 +27,14 @@ def main():
     date_ranges = parse_date_range_multi("Full reconciliation pipeline: Amazon + Hector + Hector MCP + Google Sheet")
     brand_keys = [d["brand_key"] for d in date_ranges]
     label = date_ranges[0]["label"]
+    skip_amazon = date_ranges[0]["skip_amazon"]
 
-    print(f"\n=== Scraping Amazon ({label}): {brand_keys} ===")
-    amazon_results = scrape_amazon_brands(date_ranges)
+    if skip_amazon:
+        print(f"\n=== Skipping Amazon (--skip-amazon) ===")
+        amazon_results = {brand_key: None for brand_key in brand_keys}
+    else:
+        print(f"\n=== Scraping Amazon ({label}): {brand_keys} ===")
+        amazon_results = scrape_amazon_brands(date_ranges)
 
     ws = get_worksheet()
 
